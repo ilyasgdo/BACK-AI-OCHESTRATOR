@@ -14,9 +14,11 @@ export class AiOrchestratorService {
     // IA #1 — outils + bonnes pratiques
     const tpRaw = await this.llm.toolsPractices(user);
     const tp = ensureJsonFromText(tpRaw);
+    const aiTools = Array.isArray(tp?.ai_tools) ? tp.ai_tools : [];
+    const bestPractices = Array.isArray(tp?.best_practices) ? tp.best_practices : [];
 
     // IA #2 — parcours/modules
-    const courseRaw = await this.llm.generateCourse(user, tp.ai_tools);
+    const courseRaw = await this.llm.generateCourse(user, aiTools);
     const courseJson = ensureJsonFromText(courseRaw);
 
     // Persister course
@@ -24,20 +26,21 @@ export class AiOrchestratorService {
       data: {
         userId: user.id,
         title: courseJson.title,
-        rawAiTools: tp.ai_tools,
-        rawBestPractices: tp.best_practices,
+        rawAiTools: aiTools,
+        rawBestPractices: bestPractices,
       },
     });
 
     // IA #3 — pour chaque module
     let orderIndex = 0;
-    for (const m of courseJson.modules) {
+    for (const m of (courseJson.modules ?? [])) {
       const modRaw = await this.llm.generateModule(m);
       const modJson = ensureJsonFromText(modRaw);
+      const safeModuleTitle = typeof modJson.title === 'string' ? modJson.title : (typeof m?.title === 'string' ? m.title : 'Module');
       const module = await this.prisma.module.create({
         data: {
           courseId: course.id,
-          title: modJson.title,
+          title: safeModuleTitle,
           description: m.description,
           objectives: m.objectives,
           chatbotContext:
@@ -50,22 +53,33 @@ export class AiOrchestratorService {
 
       // Leçons
       let lIndex = 0;
-      for (const l of modJson.lessons) {
+      for (const l of modJson.lessons ?? []) {
+        const safeTitle = typeof l?.title === 'string' ? l.title : 'Leçon';
+        const safeContent = typeof l?.content === 'string' ? l.content : '';
         await this.prisma.lesson.create({
-          data: { moduleId: module.id, title: l.title, content: l.content, orderIndex: lIndex++ },
+          data: { moduleId: module.id, title: safeTitle, content: safeContent, orderIndex: lIndex++ },
         });
       }
       // Quiz
       let qIndex = 0;
-      for (const q of modJson.quiz) {
+      for (const q of modJson.quiz ?? []) {
+        const safeQuestion = typeof q?.question === 'string' ? q.question : 'Question';
+        const safeOptions = Array.isArray(q?.options) ? q.options.map((o: any) => String(o)) : [];
+        const safeAnswer = typeof q?.answer === 'string' ? q.answer : (safeOptions[0] ?? '');
         await this.prisma.quiz.create({
-          data: { moduleId: module.id, question: q.question, options: q.options, answer: q.answer, orderIndex: qIndex++ },
+          data: {
+            moduleId: module.id,
+            question: safeQuestion,
+            options: safeOptions,
+            answer: safeAnswer,
+            orderIndex: qIndex++,
+          },
         });
       }
     }
 
     // IA #4 — résumé + certificat
-    const summaryRaw = await this.llm.generateSummary({ title: course.title, modules: courseJson.modules });
+    const summaryRaw = await this.llm.generateSummary({ title: course.title, modules: courseJson.modules ?? [] });
     const summaryJson = ensureJsonFromText(summaryRaw);
 
     await this.prisma.course.update({ where: { id: course.id }, data: { summary: summaryJson } });

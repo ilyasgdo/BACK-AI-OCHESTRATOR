@@ -9,4 +9,9 @@ export class CourseController {
   findOne(@Param('id') id: string) {
     return this.service.getAggregate(id);
   }
+
+  @Get('/courses/by-user/:userId')
+  findByUser(@Param('userId') userId: string) {
+    return this.service.getByUser(userId);
+  }
 }

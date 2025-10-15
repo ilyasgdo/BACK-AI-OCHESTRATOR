@@ -12,6 +12,8 @@ import { CourseModule } from './modules/course/course.module';
 import { ModuleModule } from './modules/module/module.module';
 import { HealthController } from './health.controller';
 import { AiModule } from './modules/ai/ai.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { LessonModule } from './modules/lesson/lesson.module';
 
 @Module({
   imports: [
@@ -20,7 +22,9 @@ import { AiModule } from './modules/ai/ai.module';
     ProfileModule,
     CourseModule,
     ModuleModule,
+    LessonModule,
     AiModule,
+    AuthModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

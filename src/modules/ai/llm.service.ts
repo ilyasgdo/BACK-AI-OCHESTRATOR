@@ -182,6 +182,94 @@ export class LlmService {
     return this.withRetry(async () => JSON.stringify(payload));
   }
 
+  async generateLessons(module: { title: string; description: string; objectives: string[] }): Promise<string> {
+    if (!this.useMock && this.currentProvider) {
+      const system = 'Respond strictly with JSON only.';
+      const userMsg = `Generate pedagogical lessons for a module. Return JSON { lessons: [{title,content}] }. Module: ${JSON.stringify(
+        module,
+      )}`;
+      return this.withRetry(async () => {
+        const raw = await this.currentProvider!.completeJson(system, userMsg);
+        const json = ensureJsonFromText(raw);
+        return JSON.stringify(json);
+      });
+    }
+
+    const lessons = [
+      { title: `Nouvelles notions — ${module.title}`, content: 'Concepts clés approfondis et applications concrètes.' },
+      { title: 'Atelier guidé', content: 'Étapes pratiques pour renforcer la compréhension.' },
+    ];
+    return this.withRetry(async () => JSON.stringify({ lessons }));
+  }
+
+  async developLesson(input: {
+    title: string;
+    module_title: string;
+    description?: string;
+    objectives?: string[];
+    course_title?: string;
+    course_summary?: string | unknown;
+  }): Promise<string> {
+    if (!this.useMock && this.currentProvider) {
+      const system = 'Respond strictly with JSON only.';
+      const userMsg = `Develop a lesson as structured JSON. Return JSON { content_json: { title: string, sections: Array< { type: \"text\", heading?: string, text: string } | { type: \"list\", heading?: string, items: string[] } | { type: \"code\", heading?: string, language: string, code: string } | { type: \"callout\", variant: \"tip\" | \"warning\" | \"note\", text: string } >, references?: string[], quiz?: Array<{ question: string, options: string[], answer: string }> } }.\nLesson title: ${input.title}. Module: ${input.module_title}. Course: ${input.course_title ?? ''}. Description: ${input.description ?? ''}. Objectives: ${(input.objectives ?? []).join(', ')}`;
+      return this.withRetry(async () => {
+        const raw = await this.currentProvider!.completeJson(system, userMsg);
+        const json = ensureJsonFromText(raw);
+        return JSON.stringify(json);
+      });
+    }
+
+    // Mock: structured JSON for "Introduction to Advanced Predictive Modeling"
+    const content_json = {
+      title: input.title,
+      sections: [
+        ...(input.course_title
+          ? [{ type: 'callout', variant: 'note', heading: 'Contexte du cours', text: `Cours lié: ${input.course_title}` }]
+          : []),
+        { type: 'text', heading: 'Overview', text: 'Build a strong foundation for advanced predictive modeling with Ollama.' },
+        { type: 'list', heading: 'What is Predictive Modeling?', items: [
+          'Uses historical data to forecast outcomes',
+          'Tasks: classification, regression, time series forecasting'] },
+        { type: 'list', heading: 'Ollama Overview', items: [
+          'Local LLM runtime: privacy, low latency, offline',
+          'Architecture: model runner, prompt orchestration, adapters'] },
+        { type: 'text', heading: 'Integration with ML Frameworks', text: 'Use Ollama to assist feature design, documentation, and experiment planning with scikit-learn, PyTorch or TensorFlow.' },
+        { type: 'list', heading: 'Project Structure Example', items: [
+          'data/: raw and processed datasets',
+          'notebooks/: EDA and experiments',
+          'src/: training scripts and pipelines',
+          'reports/: metrics and model cards'] },
+        { type: 'list', heading: 'Practical Steps', items: [
+          'Define target metric (RMSE/MAE/AUC)',
+          'Build baseline model',
+          'Use Ollama to suggest feature transforms and hyperparameters',
+          'Iterate with validation and cross-validation'] },
+        { type: 'callout', variant: 'warning', text: 'Beware of data leakage and overfitting. Use robust CV.' },
+        { type: 'code', heading: 'scikit-learn Baseline', language: 'python', code: 'from sklearn.linear_model import LinearRegression\nmodel = LinearRegression().fit(X_train, y_train)\nprint(model.score(X_val, y_val))' },
+        { type: 'text', heading: 'Next', text: 'Proceed to model development techniques and time series analysis.' },
+      ],
+      references: [
+        'https://scikit-learn.org/',
+        'https://ollama.com/'
+      ],
+      quiz: [
+        {
+          question: 'Quel est l’objectif principal du modèle prédictif ?',
+          options: ['Prédire des valeurs', 'Modifier les données', 'Ignorer la validation', 'Augmenter la taille du dataset'],
+          answer: 'Prédire des valeurs',
+        },
+        {
+          question: 'Quel risque doit-on surveiller ?',
+          options: ['Sur-apprentissage', 'Documentation', 'Mesure', 'Itération'],
+          answer: 'Sur-apprentissage',
+        },
+      ],
+    };
+
+    return this.withRetry(async () => JSON.stringify({ content_json }));
+  }
+
   async generateSummary(course: { title: string; modules: any[] }): Promise<string> {
     if (!this.useMock && this.currentProvider) {
       const system = 'Return a strict JSON object only.';
@@ -197,5 +285,21 @@ export class LlmService {
     const skills_gained = ['Prompting', 'Veille IA', 'Automatisation', 'Esprit critique'];
     const certificate_text = 'Félicitations pour la complétion du parcours IA. Vous avez acquis des bases solides et des pratiques responsables.';
     return this.withRetry(async () => JSON.stringify({ summary, skills_gained, certificate_text }));
+  }
+
+  async chatWithContext(context: string, message: string): Promise<string> {
+    // Retour JSON { reply: string }
+    if (!this.useMock && this.currentProvider) {
+      const system = context || 'You are a helpful tutor. Answer concisely.';
+      const userMsg = `Respond to the user's message. Return JSON { reply: string }. User message: ${message}`;
+      return this.withRetry(async () => {
+        const raw = await this.currentProvider!.completeJson(system, userMsg);
+        const json = ensureJsonFromText(raw);
+        return JSON.stringify(json);
+      });
+    }
+
+    const reply = `(${new Date().toLocaleTimeString()}) ${message}`;
+    return this.withRetry(async () => JSON.stringify({ reply }));
   }
 }

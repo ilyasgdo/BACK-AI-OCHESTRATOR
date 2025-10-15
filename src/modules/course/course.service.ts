@@ -31,4 +31,18 @@ export class CourseService {
       best_practices: course.bestPractices?.items ?? null,
     };
   }
+
+  async getByUser(userId: string) {
+    const courses = await this.prisma.course.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: { modules: true },
+    });
+    return courses.map((c) => ({
+      id: c.id,
+      title: c.title,
+      createdAt: c.createdAt,
+      modulesCount: c.modules.length,
+    }));
+  }
 }

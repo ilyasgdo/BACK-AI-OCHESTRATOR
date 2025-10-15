@@ -1,4 +1,4 @@
-import { Body, Controller, NotFoundException, Post } from '@nestjs/common';
+import { Body, Controller, NotFoundException, Post, Param, BadRequestException } from '@nestjs/common';
 import { IsDefined, IsString } from 'class-validator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ensureJsonResponse as ensureJsonFromText } from '../../common/json';
@@ -34,6 +34,26 @@ class GenerateSummaryDto {
 class RunPipelineDto {
   @IsString()
   user_id!: string;
+}
+
+class ChatModuleDto {
+  @IsString()
+  message!: string;
+}
+
+class GenerateLessonsDto {
+  @IsString()
+  module_id!: string;
+}
+
+class DevelopLessonDto {
+  @IsString()
+  lesson_id!: string;
+}
+
+class ContinueLessonDto {
+  @IsString()
+  lesson_id!: string;
 }
 
 @Controller()
@@ -152,5 +172,151 @@ export class AiController {
     if (!user) throw new NotFoundException('User not found');
     const result = await this.orchestrator.runPipelineForUser(dto.user_id);
     return { course_id: result.courseId };
+  }
+
+  @Post('/chat/module/:id')
+  async chatModule(@Param('id') id: string, @Body() dto: ChatModuleDto) {
+    const module = await this.prisma.module.findUnique({ where: { id } });
+    if (!module) throw new NotFoundException('Module not found');
+
+    const context =
+      typeof module.chatbotContext === 'string'
+        ? module.chatbotContext
+        : JSON.stringify(module.chatbotContext ?? '');
+
+    const raw = await this.llm.chatWithContext(context, dto.message);
+    const json = ensureJsonFromText(raw);
+    return json;
+  }
+
+  @Post('/ai/generate-lessons')
+  async generateLessons(@Body() dto: GenerateLessonsDto) {
+    const module = await this.prisma.module.findUnique({ where: { id: dto.module_id }, include: { lessons: true } });
+    if (!module) throw new NotFoundException('Module not found');
+
+    const raw = await this.llm.generateLessons({
+      title: module.title,
+      description: module.description ?? '',
+      objectives: (module.objectives as any) ?? [],
+    });
+    const json = ensureJsonFromText(raw);
+
+    let orderIndex = module.lessons.length;
+    const created: Array<{ id: string; title: string; content: string; orderIndex?: number | null }> = [];
+    for (const l of json.lessons ?? []) {
+      const rec = await this.prisma.lesson.create({
+        data: { moduleId: module.id, title: l.title, content: l.content, orderIndex: orderIndex++ },
+      });
+      created.push({ id: rec.id, title: rec.title, content: rec.content, orderIndex: rec.orderIndex ?? null });
+    }
+    return { lessons: created };
+  }
+
+  @Post('/ai/develop-lesson')
+  async developLesson(@Body() dto: DevelopLessonDto) {
+    const lesson = await this.prisma.lesson.findUnique({
+      where: { id: dto.lesson_id },
+      include: { module: true },
+    });
+    if (!lesson) throw new NotFoundException('Lesson not found');
+
+    const raw = await this.llm.developLesson({
+      title: lesson.title,
+      module_title: lesson.module?.title ?? '',
+      description: lesson.module?.description ?? '',
+      objectives: (lesson.module?.objectives as any) ?? [],
+    });
+    const json = ensureJsonFromText(raw);
+
+    const updated = await this.prisma.lesson.update({
+      where: { id: lesson.id },
+      data: {
+        content: typeof json.content_json !== 'undefined'
+          ? (typeof json.content_json === 'string' ? json.content_json : JSON.stringify(json.content_json))
+          : String(json.content ?? lesson.content),
+      },
+    });
+
+    return {
+      id: updated.id,
+      title: updated.title,
+      content: updated.content,
+      orderIndex: updated.orderIndex ?? null,
+    };
+  }
+
+  @Post('/ai/continue-lesson')
+  async continueLesson(@Body() dto: ContinueLessonDto) {
+    const lesson = await this.prisma.lesson.findUnique({
+      where: { id: dto.lesson_id },
+      include: { module: { include: { course: true } } },
+    });
+    if (!lesson) throw new NotFoundException('Lesson not found');
+
+    // Parse existing content JSON if any
+    let existing: any = null;
+    try {
+      const obj = JSON.parse(String(lesson.content ?? ''));
+      if (obj && typeof obj === 'object' && Array.isArray(obj.sections)) {
+        existing = obj;
+      }
+    } catch (_) {}
+
+    if (!existing) {
+      existing = {
+        title: lesson.title,
+        sections: [
+          { type: 'text', heading: 'Contenu initial', text: String(lesson.content ?? '') },
+        ],
+      };
+    }
+
+    const current = typeof existing.meta?.continuations === 'number' ? existing.meta.continuations : 0;
+    const max = 10;
+    if (current >= max) {
+      throw new BadRequestException(`Limite de continuation atteinte (${max})`);
+    }
+
+    const raw = await this.llm.developLesson({
+      title: lesson.title,
+      module_title: lesson.module?.title ?? '',
+      description: lesson.module?.description ?? '',
+      objectives: (lesson.module?.objectives as any) ?? [],
+      course_title: (lesson.module as any)?.course?.title ?? '',
+    });
+    const json = ensureJsonFromText(raw);
+
+    const generatedSections = Array.isArray(json?.content_json?.sections)
+      ? json.content_json.sections
+      : Array.isArray(json?.sections)
+      ? json.sections
+      : [];
+
+    const divider = {
+      type: 'callout',
+      variant: 'note',
+      heading: `Suite ${current + 1}`,
+      text: `Continuation basée sur le cours "${(lesson.module as any)?.course?.title ?? ''}"`,
+    };
+
+    existing.sections = [
+      ...(Array.isArray(existing.sections) ? existing.sections : []),
+      divider,
+      ...generatedSections,
+    ];
+    existing.title = existing.title ?? (json?.content_json?.title ?? lesson.title);
+    existing.meta = { ...(existing.meta ?? {}), continuations: current + 1, maxContinuations: max };
+
+    const updated = await this.prisma.lesson.update({
+      where: { id: lesson.id },
+      data: { content: JSON.stringify(existing) },
+    });
+
+    return {
+      id: updated.id,
+      title: updated.title,
+      content: updated.content,
+      orderIndex: updated.orderIndex ?? null,
+    };
   }
 }
