@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { OpenAiProvider } from './providers/openai.provider';
 import { OllamaProvider } from './providers/ollama.provider';
 import { PerplexityProvider } from './providers/perplexity.provider';
+import { GoogleProvider } from './providers/google.provider';
 import { ensureJsonResponse as ensureJsonFromText } from '../../common/json';
 
 @Injectable()
@@ -25,6 +26,7 @@ export class LlmService {
     if (!provider) return true;
     if (provider === 'openai') return !this.config.get('OPENAI_API_KEY');
     if (provider === 'perplexity') return !this.config.get('PERPLEXITY_API_KEY');
+    if (provider === 'google') return !this.config.get('GOOGLE_API_KEY');
     // Ollama par défaut sur localhost, pas d’API key
     if (provider === 'ollama') return false;
     return true;
@@ -56,8 +58,17 @@ export class LlmService {
     return new OllamaProvider(baseUrl, model);
   }
 
+  private get google(): GoogleProvider | null {
+    const provider = (this.config.get('LLM_PROVIDER') ?? '').toString().toLowerCase();
+    if (provider !== 'google') return null;
+    const apiKey = this.config.get('GOOGLE_API_KEY');
+    const model = (this.config.get('LLM_MODEL') ?? 'gemini-1.5-flash').toString();
+    if (!apiKey) return null;
+    return new GoogleProvider(apiKey, model);
+  }
+
   private get currentProvider(): { completeJson: (system: string, user: string) => Promise<string> } | null {
-    return this.openai ?? this.perplexity ?? this.ollama ?? null;
+    return this.openai ?? this.google ?? this.perplexity ?? this.ollama ?? null;
   }
 
   private async withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

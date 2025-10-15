@@ -11,7 +11,7 @@ DATABASE_URL="postgresql://postgres:postgres@localhost:5433/gdo_db"
 # Mode mock (déterministe pour les tests) ou provider
 LLM_MODE=provider
 
-# Provider: ollama | perplexity | openai
+# Provider: ollama | perplexity | openai | google
 LLM_PROVIDER=ollama
 
 # ------- Ollama -------
@@ -27,5 +27,6 @@ LLM_MAX_RETRIES=2
 # ------- Providers optionnels (laisser vide si non utilisés) -------
 # OPENAI_API_KEY=sk-...
 # PERPLEXITY_API_KEY=pk-...
+# GOOGLE_API_KEY=AIza-...
 
 # Astuce: copiez/renommez ce fichier en ".env" pour l'utiliser.

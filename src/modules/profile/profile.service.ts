@@ -6,7 +6,12 @@ export class ProfileService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: any) {
-    const tools = Array.isArray(dto.tools_used) ? dto.tools_used : [];
+    // tools_used peut être un tableau (liste) ou un objet (avec extras)
+    const tools = Array.isArray(dto.tools_used)
+      ? dto.tools_used
+      : typeof dto.tools_used === 'object' && dto.tools_used !== null
+      ? dto.tools_used
+      : [];
 
     if (dto.user_id) {
       const existing = await this.prisma.user.findUnique({ where: { id: dto.user_id } });
