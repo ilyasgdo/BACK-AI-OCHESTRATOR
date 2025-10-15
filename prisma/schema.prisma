@@ -1,0 +1,77 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(uuid())
+  job        String
+  sector     String
+  aiLevel    String
+  toolsUsed  Json
+  workStyle  String
+  createdAt  DateTime @default(now())
+  courses    Course[]
+}
+
+model Course {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  title            String
+  rawAiTools       Json
+  rawBestPractices Json
+  summary          Json?
+  createdAt        DateTime @default(now())
+  modules          Module[]
+  bestPractices    BestPractices?
+}
+
+model Module {
+  id             String   @id @default(uuid())
+  courseId       String
+  course         Course   @relation(fields: [courseId], references: [id])
+  title          String
+  description    String
+  objectives     Json
+  chatbotContext String?
+  orderIndex     Int
+  lessons        Lesson[]
+  quizzes        Quiz[]
+}
+
+model Lesson {
+  id         String  @id @default(uuid())
+  moduleId   String
+  module     Module  @relation(fields: [moduleId], references: [id])
+  title      String
+  content    String
+  orderIndex Int
+}
+
+model Quiz {
+  id         String  @id @default(uuid())
+  moduleId   String
+  module     Module  @relation(fields: [moduleId], references: [id])
+  question   String
+  options    Json
+  answer     String
+  orderIndex Int
+}
+
+model BestPractices {
+  id       String  @id @default(uuid())
+  courseId String  @unique
+  course   Course  @relation(fields: [courseId], references: [id])
+  items    Json
+}

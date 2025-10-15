@@ -1,0 +1,31 @@
+# Exemple d'environnement pour activer Ollama et configurer la base Postgres
+
+# ------- Serveur -------
+PORT=3000
+NODE_ENV=development
+
+# ------- Base de données (Prisma) -------
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/gdo_db"
+
+# ------- LLM (sélection du mode/provider) -------
+# Mode mock (déterministe pour les tests) ou provider
+LLM_MODE=provider
+
+# Provider: ollama | perplexity | openai
+LLM_PROVIDER=ollama
+
+# ------- Ollama -------
+# URL du service Ollama (par défaut: http://localhost:11434)
+OLLAMA_BASE_URL=http://localhost:11434
+# Modèle à utiliser (recommandé: llama3.1)
+LLM_MODEL=llama3.1
+
+# ------- Paramètres de résilience -------
+LLM_TIMEOUT_MS=8000
+LLM_MAX_RETRIES=2
+
+# ------- Providers optionnels (laisser vide si non utilisés) -------
+# OPENAI_API_KEY=sk-...
+# PERPLEXITY_API_KEY=pk-...
+
+# Astuce: copiez/renommez ce fichier en ".env" pour l'utiliser.
